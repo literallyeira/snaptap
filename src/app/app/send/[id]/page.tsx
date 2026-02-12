@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
 import { MOCK_USERS } from '@/lib/mock-data';
+import { compressImage } from '@/lib/compress-image';
 
 type OtherUser = { id: string; username: string; displayName: string; avatarUrl?: string };
 
@@ -46,8 +47,9 @@ export default function SendSnapPage() {
     setUploadError(null);
     setUploading(true);
     try {
+      const toUpload = await compressImage(file);
       const formData = new FormData();
-      formData.append('image', file);
+      formData.append('image', toUpload instanceof File ? toUpload : new File([toUpload], file.name || 'image.jpg', { type: 'image/jpeg' }));
       const res = await fetch('/api/upload', { method: 'POST', body: formData });
       const data = await res.json();
       if (!res.ok) {

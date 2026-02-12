@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
+import { compressImage } from '@/lib/compress-image';
 
 export default function ProfilePage() {
   const { user, updateAvatar } = useAuth();
@@ -25,8 +26,9 @@ export default function ProfilePage() {
     setError(null);
     setUploading(true);
     try {
+      const toUpload = await compressImage(file);
       const formData = new FormData();
-      formData.append('image', file);
+      formData.append('image', toUpload instanceof File ? toUpload : new File([toUpload], file.name || 'image.jpg', { type: 'image/jpeg' }));
       const res = await fetch('/api/upload', { method: 'POST', body: formData });
       const data = await res.json();
       if (!res.ok) {
