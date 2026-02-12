@@ -185,7 +185,7 @@ export default function SendSnapPage() {
       </div>
 
       <p className="text-center text-xs text-[var(--snaptap-muted)] mt-4">
-        Fotoğraflar ImgBB'de saklanır, link olarak kaydedilir.
+        Fotoğraflar Hizliresim'de saklanır, link olarak kaydedilir.
       </p>
     </div>
   );

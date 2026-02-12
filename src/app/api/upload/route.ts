@@ -1,16 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-const IMGBB_API = 'https://api.imgbb.com/1/upload';
+const HIZLIRESIM_UPLOAD = 'https://hizliresim.com/p/eklenti-yukle';
+const OX0_ST = 'https://0x0.st';
 
 export async function POST(request: NextRequest) {
-  const apiKey = process.env.IMGBB_API_KEY;
-  if (!apiKey) {
-    return NextResponse.json(
-      { error: 'ImgBB yapılandırılmamış (IMGBB_API_KEY)' },
-      { status: 503 }
-    );
-  }
-
   try {
     const formData = await request.formData();
     const file = formData.get('image') as File | null;
@@ -22,34 +15,65 @@ export async function POST(request: NextRequest) {
     }
 
     const bytes = await file.arrayBuffer();
-    const base64 = Buffer.from(bytes).toString('base64');
+    const buffer = Buffer.from(bytes);
 
-    const body = new URLSearchParams();
-    body.append('image', base64);
+    // 1) Geçici public URL al (0x0.st - API key yok)
+    const form = new FormData();
+    form.append('file', new Blob([buffer], { type: file.type }), file.name || 'image.jpg');
 
-    const res = await fetch(`${IMGBB_API}?key=${apiKey}`, {
+    const tempRes = await fetch(OX0_ST, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: body.toString(),
+      body: form,
     });
 
-    const data = await res.json();
-    if (!res.ok) {
+    if (!tempRes.ok) {
+      console.error('0x0.st upload failed:', tempRes.status);
       return NextResponse.json(
-        { error: data?.error?.message || data?.error || 'ImgBB yükleme başarısız' },
-        { status: res.status }
-      );
-    }
-
-    const link = data?.data?.url;
-    if (!link) {
-      return NextResponse.json(
-        { error: 'ImgBB link alınamadı' },
+        { error: 'Geçici yükleme başarısız, tekrar dene' },
         { status: 502 }
       );
     }
 
-    return NextResponse.json({ link });
+    const tempUrl = (await tempRes.text()).trim();
+    if (!tempUrl.startsWith('http')) {
+      return NextResponse.json(
+        { error: 'Geçici link alınamadı' },
+        { status: 502 }
+      );
+    }
+
+    // 2) Hizliresim'e URL ile yükle
+    const hrBody = new URLSearchParams();
+    hrBody.append('remote_file_url', tempUrl);
+
+    const hrRes = await fetch(HIZLIRESIM_UPLOAD, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        Accept: 'application/json',
+      },
+      body: hrBody.toString(),
+    });
+
+    const hrData = await hrRes.json().catch(() => ({}));
+
+    const images = hrData?.images?.[0];
+    if (!images || images.status !== 0) {
+      console.error('Hizliresim response:', hrData);
+      return NextResponse.json(
+        { error: 'Hizliresim yükleme başarısız' },
+        { status: 502 }
+      );
+    }
+
+    // Direkt görsel linki: i.hizliresim.com/XXX.jpg
+    let imageUrl = (images.image_url || '').trim().replace('hizliresim.com', 'i.hizliresim.com');
+    const ext = (file.name && /\.(png|gif|webp|jpeg|jpg)$/i.test(file.name))
+      ? file.name.replace(/.*\./i, '').toLowerCase().replace('jpeg', 'jpg')
+      : 'jpg';
+    if (!/\.(jpg|jpeg|png|gif)$/i.test(imageUrl)) imageUrl += '.' + ext;
+
+    return NextResponse.json({ link: imageUrl });
   } catch (e) {
     console.error('Upload error:', e);
     return NextResponse.json(
